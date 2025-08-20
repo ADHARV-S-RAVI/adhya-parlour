@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADHYA BEAUTY PARLOUR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/6.26.0/babel.min.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase configuration and initialization
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // Sign in anonymously to access Firestore
+        async function authenticate() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined') {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Firebase authentication error:", error);
+            }
+        }
+        authenticate();
+
+        window.db = db;
+        window.auth = auth;
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap');
+        .font-sans { font-family: 'Inter', sans-serif; }
+        .font-serif { font-family: 'Playfair Display', serif; }
+        html {
+            scroll-behavior: smooth;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { createPortal } = ReactDOM;
+
+        // Utility function to generate a unique ID
+        const generateUniqueId = () => Math.random().toString(36).substr(2, 9);
+
+        // Data structure for the booking API call
+        const BOOKING_API_SCHEMA = {
+          type: "OBJECT",
+          properties: {
+            "confirmationStatus": { "type": "STRING", "description": "The status of the booking. It can be 'confirmed' or 'denied'." },
+            "confirmationMessage": { "type": "STRING", "description": "A friendly message to the user about their booking status." },
+            "bookingId": { "type": "STRING", "description": "A unique ID for the booking." },
+            "appointmentDate": { "type": "STRING", "description": "The date of the appointment." },
+            "appointmentTime": { "type": "STRING", "description": "The time of the appointment." },
+          },
+          "propertyOrdering": ["confirmationStatus", "confirmationMessage", "bookingId", "appointmentDate", "appointmentTime"]
+        };
+
+        // Mock data for the parlor
+        const mockServices = [
+          { id: 1, name: "Haircut & Styling" },
+          { id: 2, name: "Facial Treatment"},
+          { id: 3, name: "Bridal Makeup"},
+          { id: 6, name: "Waxing" },
+          { id: 7, name: "Others"},
+        ];
+
+        const mockOffers = [
+          { id: 1, title: "First Visit Discount", description: "Get 15% off on your first service." },
+          { id: 3, title: "Bridal Package", description: "Complete bridal package including pre-bridal treatments for a special price." },
+        ];
+
+        const mockGallery = [
+          { id: 1, type: "image", url: "https://lh3.googleusercontent.com/p/AF1QipNtgIKOO-QGcFiAsW6fPGFLCZiPqbxTMq926TGZ=s1360-w1360-h1020-rw", alt: "Client before and after makeup" },
+          { id: 2, type: "image", url: "https://lh3.googleusercontent.com/p/AF1QipNKuYg7p8yD1HZCae7e3dOWkFbZuGtM7JIQ9v_q=w141-h176-n-k-no-nu", alt: "Beautiful hair styling work" },
+          { id: 3, type: "image", url: "https://cdn.pixabay.com/photo/2021/08/19/09/18/woman-6557552_1280.jpg", alt: "Facial Treatment" },
+          { id: 4, type: "image", url: "https://lh3.googleusercontent.com/p/AF1QipNcBUWy4lSB2P6CQHcv1FwuVLynWxQD3C2SYjqF=w203-h309-k-no", alt: "Makeup session in progress" },
+          { id: 5, type: "video", url: "https://www.instagram.com/reel/DHgFCeezXc4/?igsh=MTdzb2g2OHZma2ZoNg==", alt: "Promotional video from Instagram", thumbnail: "https://placehold.co/600x400/1C1C1C/D4AF37?text=Instagram+Reel" },
+          { id: 6, type: "image", url: "https://lh3.googleusercontent.com/p/AF1QipPEtDfr83LXMr5dZu_eSs0ALe-Wuxj_emjRSPv8=w203-h152-k-no", alt: "Detailed hair work" },
+        ];
+
+        const mockReviews = [
+          { id: 1, client: "Priya S.", review: "The staff is highly professional and the ambiance is so relaxing. I love my new haircut!", rating: 5 },
+          { id: 2, client: "Varsha S.", review: "They are incredibly talented and made me feel like a queen for my wedding day. Highly recommend their exceptional services!", rating: 5 },
+          { id: 3, client: "Ankita D.", review: "My go-to salon for self-care. The indulgent experience and top-notch products keep me coming back for more.", rating: 5 },
+          { id: 4, client: "Sneha G.", review: "Meticulous attention to detail in their treatments left me feeling refreshed and rejuvenated. It's the only place I trust for all my beauty needs.", rating: 5 },
+        ];
+
+
+        // Helper function for exponential backoff
+        const exponentialBackoffFetch = async (url, options, retries = 5, delay = 1000) => {
+          try {
+            const response = await fetch(url, options);
+            if (!response.ok) {
+              if (response.status === 429 && retries > 0) {
+                console.warn(`Rate limit hit, retrying in ${delay}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return exponentialBackoffFetch(url, options, retries - 1, delay * 2);
+              }
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response;
+          } catch (error) {
+            if (retries > 0) {
+              console.warn(`Fetch failed, retrying in ${delay}ms...`);
+              await new Promise(resolve => setTimeout(resolve, delay));
+              return exponentialBackoffFetch(url, options, retries - 1, delay * 2);
+            }
+            throw error;
+          }
+        };
+
+        // Modal component for messages
+        const Modal = ({ isOpen, title, children, onClose }) => {
+          if (!isOpen) return null;
+          return createPortal(
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-xl font-bold text-gray-800">{title}</h3>
+                  <button onClick={onClose} className="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+                </div>
+                <div>{children}</div>
+              </div>
+            </div>,
+            document.body
+          );
+        };
+
+        // ErrorBoundary component to catch rendering errors and prevent a blank page
+        class ErrorBoundary extends React.Component {
+          constructor(props) {
+            super(props);
+            this.state = { hasError: false };
+          }
+
+          static getDerivedStateFromError(error) {
+            // Update state so the next render will show the fallback UI.
+            return { hasError: true };
+          }
+
+          componentDidCatch(error, errorInfo) {
+            // You can also log the error to an error reporting service
+            console.error("Uncaught error:", error, errorInfo);
+          }
+
+          render() {
+            if (this.state.hasError) {
+              // You can render any custom fallback UI
+              return (
+                <div className="flex items-center justify-center h-screen bg-gray-100 text-gray-700 p-8 font-sans">
+                  <div className="text-center bg-white p-10 rounded-xl shadow-lg max-w-lg">
+                    <h1 className="text-3xl font-bold mb-4 text-red-500">Oops! Something went wrong.</h1>
+                    <p className="text-lg">We're sorry, but the application encountered an error. Please try refreshing the page.</p>
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="mt-6 bg-pink-500 text-white font-bold py-2 px-4 rounded-full shadow hover:bg-pink-600 transition-colors"
+                    >
+                      Refresh Page
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+            return this.props.children;
+          }
+        }
+
+        // Inline SVG icons
+        const StarIcon = ({ className }) => (
+          <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
+        );
+
+        const HandHeartIcon = ({ className }) => (
+          <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M11 19C11 15.6863 8.31371 13 5 13H4C2.89543 13 2 13.8954 2 15C2 16.1046 2.89543 17 4 17H5V19ZM11 19C11 20.1046 11.8954 21 13 21H16C17.1046 21 18 20.1046 18 19V17H21C22.1046 17 23 16.1046 23 15V13H18C16.8954 13 16 13.8954 16 15V19Z" fill="currentColor"></path>
+            <path d="M13 19C13 15.6863 15.6863 13 19 13H20C21.1046 13 22 13.8954 22 15C22 16.1046 21.1046 17 20 17H19V19ZM13 19C13 20.1046 12.1046 21 11 21H8C6.89543 21 6 20.1046 6 19V17H3C1.89543 17 1 16.1046 1 15V13H6C7.10457 13 8 13.8954 8 15V19Z" fill="currentColor"></path>
+            <path d="M12 2C12 2 15.3582 4.41727 16.3262 6.32622C17.1171 7.82855 17.5 9.87884 17.5 12V14.5L12 19L6.5 14.5V12C6.5 9.87884 6.88293 7.82855 7.6738 6.32622C8.64177 4.41727 12 2 12 2Z" stroke="currentColor"></path>
+          </svg>
+        );
+
+        const CalendarIcon = ({ className }) => (
+          <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="16" y1="2" x2="16" y2="6"></line>
+            <line x1="8" y1="2" x2="8" y2="6"></line>
+            <line x1="3" y1="10" x2="21" y2="10"></line>
+          </svg>
+        );
+
+        const QuoteLeftIcon = ({ className }) => (
+          <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 14h6l-3 3v-3zM15 14h6l-3 3v-3z"></path>
+          </svg>
+        );
+
+        const WorkOutlineIcon = ({ className }) => (
+          <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+            <path d="M12 12V2h-2v10h-2V2H6v10zM12 12V2h-2v10z"></path>
+          </svg>
+        );
+
+        const PlayCircleIcon = ({ className }) => (
+          <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polygon points="10 8 16 12 10 16 10 8"></polygon>
+          </svg>
+        );
+
+        const EmailIcon = ({ className }) => (
+          <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+            <polyline points="22,6 12,13 2,6"></polyline>
+          </svg>
+        );
+
+        const PhoneIcon = ({ className }) => (
+          <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+          </svg>
+        );
+
+        const LocationIcon = ({ className }) => (
+          <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+            <circle cx="12" cy="10" r="3"></circle>
+          </svg>
+        );
+
+        const InstagramIcon = ({ className }) => (
+          <svg xmlns="http://www.w3.org/2000/svg" className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+            <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+          </svg>
+        );
+
+        const Header = ({ onBookNowClick, onAdminClick }) => (
+          <header className="bg-white text-gray-800 shadow-md sticky top-0 z-40">
+            <div className="container mx-auto p-4 flex items-center justify-between">
+              <img src="https://i.ibb.co/NzRS0xz/Picsart-25-08-10-13-37-38-699.png" alt="ADHYA BEAUTY PARLOUR Logo" className="h-12" />
+              <nav className="hidden md:flex space-x-8 text-lg font-medium">
+                <a href="#about" className="hover:text-amber-600 transition-colors">About</a>
+                <a href="#services" className="hover:text-amber-600 transition-colors">Services</a>
+                <a href="#offers" className="hover:text-amber-600 transition-colors">Offers</a>
+                <a href="#gallery" className="hover:text-amber-600 transition-colors">Gallery</a>
+                <a href="#reviews" className="hover:text-amber-600 transition-colors">Reviews</a>
+              </nav>
+              <div className="flex space-x-4">
+                <button
+                  onClick={onBookNowClick}
+                  className="bg-amber-500 text-white font-bold py-2 px-5 rounded-full shadow-lg transition-transform transform hover:scale-105 hover:bg-amber-600"
+                >
+                  Book Now
+                </button>
+                <button
+                  onClick={onAdminClick}
+                  className="bg-gray-800 text-white font-bold py-2 px-5 rounded-full shadow-lg transition-transform transform hover:scale-105 hover:bg-gray-700"
+                >
+                  Admin
+                </button>
+              </div>
+            </div>
+          </header>
+        );
+
+        const SectionTitle = ({ title }) => (
+          <h2 className="text-4xl md:text-5xl font-bold font-serif text-center mb-12 text-gray-800 border-b-2 border-amber-500 inline-block pb-2">
+            {title}
+          </h2>
+        );
+
+        const HeroSection = ({ onBookNowClick }) => (
+          <section className="relative h-screen flex items-center justify-center bg-cover bg-center text-white" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1500840216050-6ffa99d75160?q=80&w=1197&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D')" }}>
+            <div className="absolute inset-0 bg-black opacity-60"></div>
+            <div className="relative text-center z-10 p-4">
+              <h1 className="text-5xl md:text-7xl font-bold font-serif drop-shadow-lg">Discover Your Perfect Look</h1>
+              <p className="mt-4 text-lg md:text-xl font-light max-w-2xl mx-auto">
+                We offer a wide range of beauty and grooming services with a touch of elegance and professionalism.
+              </p>
+              <button
+                onClick={onBookNowClick}
+                className="mt-8 bg-amber-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 hover:bg-amber-600"
+              >
+                Book Your Appointment
+              </button>
+            </div>
+          </section>
+        );
+
+        const Services = () => (
+          <section id="services" className="py-20 bg-white">
+            <div className="container mx-auto px-4 text-center">
+              <SectionTitle title="Our Services" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
+                {mockServices.filter(s => s.name !== "Others").map(service => (
+                  <div key={service.id} className="bg-neutral-100 p-8 rounded-xl shadow-lg border border-neutral-200 hover:shadow-2xl transition-shadow duration-300">
+                    <h3 className="text-2xl font-semibold mb-2 text-gray-800">{service.name}</h3>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        );
+
+        const Offers = () => (
+          <section id="offers" className="py-20 bg-neutral-100">
+            <div className="container mx-auto px-4 text-center">
+              <SectionTitle title="Special Offers" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
+                {mockOffers.map(offer => (
+                  <div key={offer.id} className="bg-white p-8 rounded-xl shadow-lg border border-neutral-200">
+                    <h3 className="text-2xl font-semibold mb-4 text-amber-600">{offer.title}</h3>
+                    <p className="text-gray-700 leading-relaxed">{offer.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        );
+
+        const Gallery = () => (
+          <section id="gallery" className="py-20 bg-white">
+            <div className="container mx-auto px-4 text-center">
+              <SectionTitle title="Our Work" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                {mockGallery.map(item => (
+                  <div key={item.id} className="relative overflow-hidden rounded-xl shadow-lg group hover:shadow-xl transition-shadow duration-300">
+                    {item.type === 'image' ? (
+                      <img src={item.url} alt={item.alt} className="w-full h-72 object-cover transform group-hover:scale-105 transition-transform" />
+                    ) : (
+                      <a href={item.url} target="_blank" rel="noopener noreferrer" className="block w-full h-72 relative">
+                        <img src={item.thumbnail} alt={item.alt} className="w-full h-72 object-cover transform group-hover:scale-105 transition-transform" />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 group-hover:bg-opacity-20 transition-colors">
+                          <PlayCircleIcon className="text-white w-16 h-16 opacity-80 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        );
+
+        const Reviews = () => (
+          <section id="reviews" className="py-20 bg-neutral-100">
+            <div className="container mx-auto px-4 text-center">
+              <SectionTitle title="Client Testimonials" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
+                {mockReviews.map(review => (
+                  <div key={review.id} className="bg-white p-8 rounded-xl shadow-lg border border-neutral-200">
+                    <p className="text-gray-700 mb-4 italic leading-relaxed">"{review.review}"</p>
+                    <div className="flex items-center justify-between mt-4">
+                      <span className="font-semibold text-gray-800">- {review.client}</span>
+                      <div className="flex text-amber-500">
+                        {Array(review.rating).fill().map((_, i) => (
+                          <StarIcon key={i} className="w-5 h-5" />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        );
+          
+        const BookingForm = ({ formData, handleInputChange, handleBookingSubmit, isLoading, mockServices }) => (
+          <section id="booking" className="py-20 bg-neutral-100">
+            <div className="container mx-auto px-4 text-center">
+              <SectionTitle title="Book An Appointment" />
+              <div className="bg-white p-8 md:p-12 rounded-xl shadow-lg max-w-2xl mx-auto">
+                <form onSubmit={handleBookingSubmit} className="space-y-6">
+                  <div>
+                    <label htmlFor="service" className="block text-gray-700 font-semibold mb-2">Service</label>
+                    <select
+                      id="service"
+                      name="service"
+                      value={formData.service}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                      {mockServices.map(service => (
+                        <option key={service.id} value={service.name}>{service.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {formData.service === "Others" && (
+                    <div>
+                      <label htmlFor="customRequirement" className="block text-gray-700 font-semibold mb-2">Your Requirement</label>
+                      <textarea
+                        id="customRequirement"
+                        name="customRequirement"
+                        value={formData.customRequirement}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        rows="3"
+                        placeholder="e.g., 'I need a special bridal makeup for an evening event.'"
+                      />
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label htmlFor="date" className="block text-gray-700 font-semibold mb-2">Date</label>
+                      <input
+                        type="date"
+                        id="date"
+                        name="date"
+                        value={formData.date}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="time" className="block text-gray-700 font-semibold mb-2">Time</label>
+                      <input
+                        type="time"
+                        id="time"
+                        name="time"
+                        value={formData.time}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="clientName" className="block text-gray-700 font-semibold mb-2">Your Name</label>
+                    <input
+                      type="text"
+                      id="clientName"
+                      name="clientName"
+                      value={formData.clientName}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label htmlFor="clientPhone" className="block text-gray-700 font-semibold mb-2">Phone Number</label>
+                      <input
+                        type="tel"
+                        id="clientPhone"
+                        name="clientPhone"
+                        value={formData.clientPhone}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="clientEmail" className="block text-gray-700 font-semibold mb-2">Email Address (Optional)</label>
+                      <input
+                        type="email"
+                        id="clientEmail"
+                        name="clientEmail"
+                        value={formData.clientEmail}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full bg-amber-500 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoading ? 'Processing...' : 'Confirm Booking'}
+                  </button>
+                </form>
+              </div>
+            </div>
+          </section>
+        );
+
+
+        const AdminPanel = ({ bookings, onBack }) => (
+          <section className="py-20 bg-neutral-100 min-h-screen">
+            <div className="container mx-auto px-4">
+              <div className="flex items-center mb-8">
+                <button onClick={onBack} className="text-gray-800 hover:text-amber-600 transition-colors mr-4">&larr; Back to Home</button>
+                <h2 className="text-3xl font-bold text-gray-800">Booking Management</h2>
+              </div>
+              <div className="bg-white p-8 rounded-xl shadow-lg">
+                {bookings.length > 0 ? (
+                  <ul className="space-y-4">
+                    {bookings.map((booking) => (
+                      <li key={booking.id} className="bg-neutral-50 p-6 rounded-lg shadow-inner border border-neutral-200">
+                        <p className="text-lg font-semibold text-gray-800">Booking ID: <span className="font-mono text-sm text-gray-600">{booking.id}</span></p>
+                        <p className="text-gray-700 mt-1">Service: <span className="font-medium text-amber-600">{booking.service}</span></p>
+                        <p className="text-gray-700">Date: <span className="font-medium">{booking.date}</span></p>
+                        <p className="text-gray-700">Time: <span className="font-medium">{booking.time}</span></p>
+                        <p className="text-gray-700">Client Name: <span className="font-medium">{booking.clientName}</span></p>
+                        <p className="text-gray-700">Phone: <span className="font-medium">{booking.clientPhone}</span></p>
+                        <p className="text-gray-700">Email: <span className="font-medium">{booking.clientEmail}</span></p>
+                        <p className="text-gray-700">Requirements: <span className="font-medium">{booking.customRequirement || "N/A"}</span></p>
+                        <p className="text-gray-500 text-sm mt-2">Status: <span className="font-semibold text-green-600">Confirmed</span></p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-center text-gray-500 italic">No new bookings yet.</p>
+                )}
+              </div>
+            </div>
+          </section>
+        );
+
+        const Footer = () => (
+          <footer className="bg-gray-800 text-gray-300 py-12">
+            <div className="container mx-auto px-4 text-center">
+              <div className="flex flex-col md:flex-row justify-center items-center gap-6 mb-8">
+                <div className="flex items-center gap-2">
+                  <LocationIcon className="text-amber-500 w-6 h-6" />
+                  <a href="https://maps.app.goo.gl/w94MqBwLUtyE48zT8" target="_blank" rel="noopener noreferrer" className="hover:text-amber-500 transition-colors">
+                    3rd Cross Road, west, 3rd Main Rd, Vittal Nagar, 2nd Stage, Kumaraswamy Layout, Bengaluru, Karnataka 560111
+                  </a>
+                </div>
+                <div className="flex items-center gap-2">
+                  <PhoneIcon className="text-amber-500 w-6 h-6" />
+                  <span>+91 9036762680</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <EmailIcon className="text-amber-500 w-6 h-6" />
+                  <span>cksheeba975@gmail.com</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <InstagramIcon className="text-amber-500 w-6 h-6" />
+                  <a href="https://www.instagram.com/sheeba_s_makeover/?igsh=N2o0MDY3OWwzY2hl#" target="_blank" rel="noopener noreferrer" className="hover:text-amber-500 transition-colors">
+                    @sheeba_s_makeover
+                  </a>
+                </div>
+              </div>
+              <p className="text-sm text-gray-500">&copy; {new Date().getFullYear()} ADHYA BEAUTY PARLOUR. All rights reserved.</p>
+            </div>
+          </footer>
+        );
+
+        const AdminLoginModal = ({ isOpen, onLogin, onClose }) => {
+          const [password, setPassword] = useState('');
+
+          const handleSubmit = (e) => {
+            e.preventDefault();
+            onLogin(password);
+            setPassword('');
+          };
+
+          return (
+            <Modal isOpen={isOpen} title="Admin Login" onClose={onClose}>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <label htmlFor="password" className="block text-gray-700 font-semibold mb-2">Password</label>
+                  <input
+                    type="password"
+                    id="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="w-full bg-amber-500 text-white font-bold py-3 px-6 rounded-lg shadow-lg hover:bg-amber-600 transition-colors"
+                >
+                  Login
+                </button>
+              </form>
+            </Modal>
+          );
+        };
+        
+        const App = () => {
+          const [activeView, setActiveView] = useState('home'); // 'home' or 'admin'
+          const [bookings, setBookings] = useState([]);
+          const [formData, setFormData] = useState({
+            service: mockServices[0].name,
+            date: '',
+            time: '',
+            clientName: '',
+            clientPhone: '',
+            clientEmail: '',
+            customRequirement: '',
+          });
+          const [modal, setModal] = useState({ isOpen: false, title: '', message: '' });
+          const [showAdminLogin, setShowAdminLogin] = useState(false);
+          const [isLoading, setIsLoading] = useState(false);
+
+          useEffect(() => {
+            if (activeView === 'admin' && window.db && window.auth) {
+                const userId = window.auth.currentUser ? window.auth.currentUser.uid : 'anonymous';
+                const q = query(collection(window.db, `artifacts/__app_id/users/${userId}/bookings`));
+                const unsubscribe = onSnapshot(q, (snapshot) => {
+                    const fetchedBookings = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    setBookings(fetchedBookings);
+                });
+                return () => unsubscribe();
+            }
+          }, [activeView]);
+
+          const handleInputChange = (e) => {
+            const { name, value } = e.target;
+            setFormData({ ...formData, [name]: value });
+          };
+
+          const handleBookNowClick = () => {
+            const bookingSection = document.getElementById('booking');
+            if (bookingSection) {
+              bookingSection.scrollIntoView({ behavior: 'smooth' });
+            }
+          };
+
+          const handleAdminClick = () => {
+            setShowAdminLogin(true);
+          };
+
+          const handleAdminLogin = (password) => {
+            if (password === 'admin') {
+              setActiveView('admin');
+              setShowAdminLogin(false);
+            } else {
+              alert('Incorrect password.');
+            }
+          };
+
+          const handleBookingSubmit = async (e) => {
+            e.preventDefault();
+            setIsLoading(true);
+
+            const prompt = `Simulate a booking confirmation for a beauty parlor. The client wants to book a '${formData.service}' on ${formData.date} at ${formData.time}. A beauty parlour, 'Adhya Beauty Parlour', needs to check if the time slot is available and confirm or deny the booking. Always deny bookings for the date '2025-08-15' as it is a holiday. For all other dates, confirm the booking. Use the JSON schema to provide the response.`;
+
+            try {
+              let chatHistory = [];
+              chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+              const payload = {
+                contents: chatHistory,
+                generationConfig: {
+                  responseMimeType: "application/json",
+                  responseSchema: BOOKING_API_SCHEMA
+                }
+              };
+              const apiKey = "";
+              const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+              
+              const response = await exponentialBackoffFetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+              });
+              const result = await response.json();
+
+              if (result.candidates && result.candidates.length > 0) {
+                const jsonText = result.candidates[0].content.parts[0].text;
+                const parsedJson = JSON.parse(jsonText);
+
+                if (parsedJson.confirmationStatus === 'confirmed') {
+                    const newBooking = {
+                        id: generateUniqueId(),
+                        ...formData,
+                        status: parsedJson.confirmationStatus,
+                        timestamp: new Date().toISOString()
+                    };
+
+                    const userId = window.auth.currentUser ? window.auth.currentUser.uid : 'anonymous';
+                    await addDoc(collection(window.db, `artifacts/__app_id/users/${userId}/bookings`), newBooking);
+
+                    setModal({
+                        isOpen: true,
+                        title: 'Booking Confirmed!',
+                        message: (
+                            <React.Fragment>
+                                <p>Thank you for booking with us, {formData.clientName}! Your appointment is confirmed.</p>
+                                <p className="mt-2 text-gray-700">
+                                  **Note:** Your mother can now view this booking in the Admin Panel.
+                                </p>
+                                <ul className="list-disc list-inside mt-2">
+                                  <li>Service: {formData.service}</li>
+                                  <li>Date: {formData.date}</li>
+                                  <li>Time: {formData.time}</li>
+                                </ul>
+                            </React.Fragment>
+                        ),
+                    });
+                } else {
+                  setModal({
+                    isOpen: true,
+                    title: 'Booking Denied',
+                    message: <p>{parsedJson.confirmationMessage || 'The requested time slot is not available. Please try a different date or time.'}</p>
+                  });
+                }
+              } else {
+                throw new Error('API response format is not as expected.');
+              }
+            } catch (error) {
+              console.error('Error during booking simulation:', error);
+              setModal({
+                isOpen: true,
+                title: 'Booking Error',
+                message: <p>Something went wrong while processing your request. Please try again later.</p>,
+              });
+            } finally {
+              setIsLoading(false);
+            }
+          };
+          
+          const AboutUs = () => (
+            <section id="about" className="py-20 bg-white">
+              <div className="container mx-auto px-4 text-center">
+                <SectionTitle title="About Adhya Beauty Parlour" />
+                <p className="text-lg text-gray-700 leading-loose max-w-2xl mx-auto">
+                  Adhya Beauty Parlour is dedicated to providing a luxurious and relaxing experience for all our clients. We specialize in bridal makeup, hair styling, and personalized beauty treatments, ensuring you look and feel your absolute best.
+                </p>
+              </div>
+            </section>
+          );
+
+          return (
+            <div className="font-sans antialiased text-gray-800">
+              <ErrorBoundary>
+                {activeView === 'home' && (
+                  <React.Fragment>
+                    <Header onBookNowClick={handleBookNowClick} onAdminClick={handleAdminClick} />
+                    <HeroSection onBookNowClick={handleBookNowClick} />
+                    <AboutUs />
+                    <Services />
+                    <Offers />
+                    <Gallery />
+                    <Reviews />
+                    <BookingForm formData={formData} handleInputChange={handleInputChange} handleBookingSubmit={handleBookingSubmit} isLoading={isLoading} mockServices={mockServices} />
+                    <Footer />
+                  </React.Fragment>
+                )}
+                {activeView === 'admin' && <AdminPanel bookings={bookings} onBack={() => setActiveView('home')} />}
+              </ErrorBoundary>
+
+              <AdminLoginModal
+                isOpen={showAdminLogin}
+                onLogin={handleAdminLogin}
+                onClose={() => setShowAdminLogin(false)}
+              />
+
+              <Modal
+                isOpen={modal.isOpen}
+                title={modal.title}
+                onClose={() => setModal({ isOpen: false, title: '', message: '' })}
+              >
+                {modal.message}
+              </Modal>
+            </div>
+          );
+        };
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
