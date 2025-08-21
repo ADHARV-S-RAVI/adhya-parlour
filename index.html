@@ -10,7 +10,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/6.26.0/babel.min.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Firebase configuration and initialization
@@ -27,6 +27,15 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
+        // Expose Firebase functions and objects to the global scope for use in the Babel script
+        window.db = db;
+        window.auth = auth;
+        window.collection = collection;
+        window.addDoc = addDoc;
+        window.onSnapshot = onSnapshot;
+        window.query = query;
+        window.firebaseConfig = firebaseConfig;
+
         // Sign in anonymously to access Firestore
         async function authenticate() {
             try {
@@ -36,13 +45,6 @@
             }
         }
         authenticate();
-
-        window.db = db;
-        window.auth = auth;
-        window.collection = collection;
-        window.addDoc = addDoc;
-        window.onSnapshot = onSnapshot;
-        window.query = query;
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap');
@@ -468,27 +470,41 @@
         );
 
 
-        const AdminPanel = ({ bookings, onBack }) => (
+        const AdminPanel = ({ bookings, onBack, filter, onFilterChange }) => (
           <section className="py-20 bg-neutral-100 min-h-screen">
             <div className="container mx-auto px-4">
-              <div className="flex items-center mb-8">
+              <div className="flex items-center justify-between mb-8">
                 <button onClick={onBack} className="text-gray-800 hover:text-amber-600 transition-colors mr-4">&larr; Back to Home</button>
                 <h2 className="text-3xl font-bold text-gray-800">Booking Management</h2>
+                <select
+                  value={filter}
+                  onChange={(e) => onFilterChange(e.target.value)}
+                  className="bg-white border border-gray-300 rounded-lg px-4 py-2"
+                >
+                  <option value="all">All Bookings</option>
+                  <option value="today">Today's Bookings</option>
+                  <option value="yesterday">Yesterday's Bookings</option>
+                </select>
               </div>
               <div className="bg-white p-8 rounded-xl shadow-lg">
                 {bookings.length > 0 ? (
                   <ul className="space-y-4">
                     {bookings.map((booking) => (
-                      <li key={booking.id} className="bg-neutral-50 p-6 rounded-lg shadow-inner border border-neutral-200">
-                        <p className="text-lg font-semibold text-gray-800">Booking ID: <span className="font-mono text-sm text-gray-600">{booking.id}</span></p>
-                        <p className="text-gray-700 mt-1">Service: <span className="font-medium text-amber-600">{booking.service}</span></p>
-                        <p className="text-gray-700">Date: <span className="font-medium">{booking.date}</span></p>
-                        <p className="text-gray-700">Time: <span className="font-medium">{booking.time}</span></p>
-                        <p className="text-gray-700">Client Name: <span className="font-medium">{booking.clientName}</span></p>
-                        <p className="text-gray-700">Phone: <span className="font-medium">{booking.clientPhone}</span></p>
-                        <p className="text-gray-700">Email: <span className="font-medium">{booking.clientEmail}</span></p>
-                        <p className="text-gray-700">Requirements: <span className="font-medium">{booking.customRequirement || "N/A"}</span></p>
-                        <p className="text-gray-500 text-sm mt-2">Status: <span className="font-semibold text-green-600">Confirmed</span></p>
+                      <li key={booking.id} className="bg-neutral-50 p-6 rounded-lg shadow-inner border border-neutral-200 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="col-span-1">
+                          <p className="text-lg font-semibold text-gray-800">Client: <span className="font-medium text-amber-600">{booking.clientName}</span></p>
+                          <p className="text-sm text-gray-700">Phone: {booking.clientPhone}</p>
+                          <p className="text-sm text-gray-700">Email: {booking.clientEmail}</p>
+                        </div>
+                        <div className="col-span-1">
+                          <p className="text-sm text-gray-800">Service: <span className="font-medium">{booking.service}</span></p>
+                          <p className="text-sm text-gray-800">Requirements: <span className="font-medium">{booking.customRequirement || "N/A"}</span></p>
+                        </div>
+                        <div className-="col-span-1">
+                          <p className="text-sm text-gray-800">Date: <span className="font-medium">{booking.date}</span></p>
+                          <p className="text-sm text-gray-800">Time: <span className="font-medium">{booking.time}</span></p>
+                          <p className="text-xs text-gray-500 mt-2">Booking ID: <span className="font-mono">{booking.id}</span></p>
+                        </div>
                       </li>
                     ))}
                   </ul>
@@ -565,8 +581,9 @@
         };
         
         const App = () => {
-          const [activeView, setActiveView] = useState('home'); // 'home' or 'admin'
+          const [activeView, setActiveView] = useState('home');
           const [bookings, setBookings] = useState([]);
+          const [filter, setFilter] = useState('all');
           const [formData, setFormData] = useState({
             service: mockServices[0].name,
             date: '',
@@ -583,7 +600,7 @@
           useEffect(() => {
             if (activeView === 'admin' && window.db && window.auth) {
                 const userId = window.auth.currentUser ? window.auth.currentUser.uid : 'anonymous';
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                const appId = typeof window.firebaseConfig.appId !== 'undefined' ? window.firebaseConfig.appId : 'default-app-id';
                 const q = window.query(window.collection(window.db, `artifacts/${appId}/users/${userId}/bookings`));
                 const unsubscribe = window.onSnapshot(q, (snapshot) => {
                     const fetchedBookings = snapshot.docs.map(doc => ({
@@ -613,7 +630,7 @@
           };
 
           const handleAdminLogin = (password) => {
-            if (password === 'admin') {
+            if (password === '25122005') {
               setActiveView('admin');
               setShowAdminLogin(false);
             } else {
@@ -625,20 +642,18 @@
             e.preventDefault();
             setIsLoading(true);
 
-            // A simplified booking confirmation logic without AI API call
             const confirmationStatus = 'confirmed';
 
             try {
               if (confirmationStatus === 'confirmed') {
                 const newBooking = {
-                  id: generateUniqueId(),
                   ...formData,
                   status: confirmationStatus,
                   timestamp: new Date().toISOString()
                 };
 
                 const userId = window.auth.currentUser ? window.auth.currentUser.uid : 'anonymous';
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                const appId = typeof window.firebaseConfig.appId !== 'undefined' ? window.firebaseConfig.appId : 'default-app-id';
                 await window.addDoc(window.collection(window.db, `artifacts/${appId}/users/${userId}/bookings`), newBooking);
 
                 setModal({
@@ -664,7 +679,7 @@
                 });
               }
             } catch (error) {
-              console.error('Error during booking simulation:', error);
+              console.error('Error during booking:', error);
               setModal({
                 isOpen: true,
                 title: 'Booking Error',
@@ -674,6 +689,33 @@
               setIsLoading(false);
             }
           };
+
+          const isToday = (dateStr) => {
+            const today = new Date();
+            const date = new Date(dateStr);
+            return today.getFullYear() === date.getFullYear() &&
+                   today.getMonth() === date.getMonth() &&
+                   today.getDate() === date.getDate();
+          };
+          
+          const isYesterday = (dateStr) => {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            const date = new Date(dateStr);
+            return yesterday.getFullYear() === date.getFullYear() &&
+                   yesterday.getMonth() === date.getMonth() &&
+                   yesterday.getDate() === date.getDate();
+          };
+
+          const filteredBookings = bookings.filter(booking => {
+            if (filter === 'today') {
+              return isToday(booking.date);
+            }
+            if (filter === 'yesterday') {
+              return isYesterday(booking.date);
+            }
+            return true;
+          });
           
           const AboutUs = () => (
             <section id="about" className="py-20 bg-white">
@@ -702,7 +744,7 @@
                     <Footer />
                   </React.Fragment>
                 )}
-                {activeView === 'admin' && <AdminPanel bookings={bookings} onBack={() => setActiveView('home')} />}
+                {activeView === 'admin' && <AdminPanel bookings={filteredBookings} onBack={() => setActiveView('home')} filter={filter} onFilterChange={setFilter} />}
               </ErrorBoundary>
 
               <AdminLoginModal
