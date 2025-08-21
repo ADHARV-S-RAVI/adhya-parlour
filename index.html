@@ -10,20 +10,19 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/6.26.0/babel.min.js"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Firebase configuration and initialization
-        // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyC_WI_JpMIc0vgDZ55-B3xW5bSD5mpol2o",
-  authDomain: "adhya-parlour.firebaseapp.com",
-  projectId: "adhya-parlour",
-  storageBucket: "adhya-parlour.firebasestorage.app",
-  messagingSenderId: "146748867157",
-  appId: "1:146748867157:web:3d3c58b6cd267d6fe30adc",
-  measurementId: "G-DWHWEE6WFY"
-};
+        const firebaseConfig = {
+            apiKey: "AIzaSyC_WI_JpMIc0vgDZ55-B3xW5bSD5mpol2o",
+            authDomain: "adhya-parlour.firebaseapp.com",
+            projectId: "adhya-parlour",
+            storageBucket: "adhya-parlour.firebasestorage.app",
+            messagingSenderId: "146748867157",
+            appId: "1:146748867157:web:3d3c58b6cd267d6fe30adc",
+            measurementId: "G-DWHWEE6WFY"
+        };
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
@@ -31,11 +30,7 @@ const firebaseConfig = {
         // Sign in anonymously to access Firestore
         async function authenticate() {
             try {
-                if (typeof __initial_auth_token !== 'undefined') {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                 await signInAnonymously(auth);
             } catch (error) {
                 console.error("Firebase authentication error:", error);
             }
@@ -67,19 +62,6 @@ const firebaseConfig = {
 
         // Utility function to generate a unique ID
         const generateUniqueId = () => Math.random().toString(36).substr(2, 9);
-
-        // Data structure for the booking API call
-        const BOOKING_API_SCHEMA = {
-          type: "OBJECT",
-          properties: {
-            "confirmationStatus": { "type": "STRING", "description": "The status of the booking. It can be 'confirmed' or 'denied'." },
-            "confirmationMessage": { "type": "STRING", "description": "A friendly message to the user about their booking status." },
-            "bookingId": { "type": "STRING", "description": "A unique ID for the booking." },
-            "appointmentDate": { "type": "STRING", "description": "The date of the appointment." },
-            "appointmentTime": { "type": "STRING", "description": "The time of the appointment." },
-          },
-          "propertyOrdering": ["confirmationStatus", "confirmationMessage", "bookingId", "appointmentDate", "appointmentTime"]
-        };
 
         // Mock data for the parlor
         const mockServices = [
@@ -113,29 +95,6 @@ const firebaseConfig = {
           { id: 4, client: "Sneha G.", review: "Meticulous attention to detail in their treatments left me feeling refreshed and rejuvenated. It's the only place I trust for all my beauty needs.", rating: 5 },
         ];
 
-
-        // Helper function for exponential backoff
-        const exponentialBackoffFetch = async (url, options, retries = 5, delay = 1000) => {
-          try {
-            const response = await fetch(url, options);
-            if (!response.ok) {
-              if (response.status === 429 && retries > 0) {
-                console.warn(`Rate limit hit, retrying in ${delay}ms...`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-                return exponentialBackoffFetch(url, options, retries - 1, delay * 2);
-              }
-              throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response;
-          } catch (error) {
-            if (retries > 0) {
-              console.warn(`Fetch failed, retrying in ${delay}ms...`);
-              await new Promise(resolve => setTimeout(resolve, delay));
-              return exponentialBackoffFetch(url, options, retries - 1, delay * 2);
-            }
-            throw error;
-          }
-        };
 
         // Modal component for messages
         const Modal = ({ isOpen, title, children, onClose }) => {
@@ -624,7 +583,8 @@ const firebaseConfig = {
           useEffect(() => {
             if (activeView === 'admin' && window.db && window.auth) {
                 const userId = window.auth.currentUser ? window.auth.currentUser.uid : 'anonymous';
-                const q = window.query(window.collection(window.db, `artifacts/__app_id/users/${userId}/bookings`));
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+                const q = window.query(window.collection(window.db, `artifacts/${appId}/users/${userId}/bookings`));
                 const unsubscribe = window.onSnapshot(q, (snapshot) => {
                     const fetchedBookings = snapshot.docs.map(doc => ({
                         id: doc.id,
@@ -687,7 +647,7 @@ const firebaseConfig = {
                   message: (
                     <React.Fragment>
                       <p>Thank you for booking with us, {formData.clientName}! Your appointment is confirmed.</p>
-                      
+                  
                       <ul className="list-disc list-inside mt-2">
                         <li>Service: {formData.service}</li>
                         <li>Date: {formData.date}</li>
@@ -766,5 +726,3 @@ const firebaseConfig = {
     </script>
 </body>
 </html>
-
-
