@@ -27,22 +27,13 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        // Sign in anonymously to access Firestore
-        async function authenticate() {
-            try {
-                if (typeof __initial_auth_token !== 'undefined') {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (error) {
-                console.error("Firebase authentication error:", error);
-            }
-        }
-        authenticate();
-
+        // Expose Firebase functions and objects to the global scope for use in the Babel script
         window.db = db;
         window.auth = auth;
+        window.collection = collection;
+        window.addDoc = addDoc;
+        window.onSnapshot = onSnapshot;
+        window.query = query;
     </script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@700&display=swap');
@@ -619,8 +610,8 @@
           useEffect(() => {
             if (activeView === 'admin' && window.db && window.auth) {
                 const userId = window.auth.currentUser ? window.auth.currentUser.uid : 'anonymous';
-                const q = query(collection(window.db, `artifacts/__app_id/users/${userId}/bookings`));
-                const unsubscribe = onSnapshot(q, (snapshot) => {
+                const q = window.query(window.collection(window.db, `artifacts/__app_id/users/${userId}/bookings`));
+                const unsubscribe = window.onSnapshot(q, (snapshot) => {
                     const fetchedBookings = snapshot.docs.map(doc => ({
                         id: doc.id,
                         ...doc.data()
@@ -695,7 +686,7 @@
                     };
 
                     const userId = window.auth.currentUser ? window.auth.currentUser.uid : 'anonymous';
-                    await addDoc(collection(window.db, `artifacts/__app_id/users/${userId}/bookings`), newBooking);
+                    await window.addDoc(window.collection(window.db, `artifacts/__app_id/users/${userId}/bookings`), newBooking);
 
                     setModal({
                         isOpen: true,
@@ -787,4 +778,3 @@
     </script>
 </body>
 </html>
-
